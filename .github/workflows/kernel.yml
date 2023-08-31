@@ -40,3 +40,41 @@ jobs:
       with:
        name: release-zip
        path: ak3/*.zip
+
+  build-martini-clang:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Set Swap Space
+      uses: pierotofy/set-swap-space@master
+      with:
+        swap-size-gb: 8
+    - name: Setup repo
+      run: sudo apt update -y && sudo apt install -y repo elfutils libarchive-tools
+    - name: Repo sync
+      run: |
+        repo init -u https://github.com/mvaisakh/android_kernel_manifest -b eva-oneplus-5.4
+        repo sync -j$(nproc --all)
+    - name: Sync Clang
+      run: |
+        mkdir -p prebuilts-master/clang/host/linux-x86/clang-r450784d/
+        cd prebuilts-master/clang/host/linux-x86/clang-r450784d/
+        curl -LO "https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman"
+        bash antman -S=latest
+        bash antman --patch=glibc
+    - name: Clang Build
+      run: |
+        sed -i s/build-user/aleksana/g build/_setup_env.sh
+        sed -i s/build-host/whatever-linux/g build/_setup_env.sh
+        BUILD_CONFIG=kernel/msm-5.4/build.config.msm.lahaina VARIANT=nqgki DEVICE=9RT LTO=full POLLY=1 BUILD_KERNEL=1 build/build.sh
+    - name: Create zip
+      run: |
+        cp out/msm-5.4-lahaina-nqgki/dist/Image ak3/
+        cat out/msm-5.4-lahaina-nqgki/dist/*.dtb > ak3/dtb
+        cp out/msm-5.4-lahaina-nqgki/dist/dtbo.img ak3/
+        cd ak3/ && zip -r9 eva-martini-$(/bin/date -u '+%d%m%Y%I%M')-clang.zip * -x .git README.md ./*/placeholder
+        cd ../
+    - uses: actions/upload-artifact@main
+      with:
+       name: release-zip
+       path: ak3/*.zip
